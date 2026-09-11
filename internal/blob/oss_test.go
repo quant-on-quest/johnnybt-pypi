@@ -117,10 +117,10 @@ func TestOSSURLValidation(t *testing.T) {
 	t.Setenv("OSS_ACCESS_KEY_ID", "x")
 	t.Setenv("OSS_ACCESS_KEY_SECRET", "y")
 	cases := map[string]string{
-		"oss://bucket":                        "region",
-		"oss://?region=cn-guangzhou":          "bucket",
+		"oss://bucket":                           "region",
+		"oss://?region=cn-guangzhou":             "bucket",
 		"oss://bucket?region=cn-guangzhou&foo=1": "foo",
-		"s3://bucket?region=cn-guangzhou":     "scheme",
+		"s3://bucket?region=cn-guangzhou":        "scheme",
 	}
 	for u, want := range cases {
 		_, err := OpenOSS(context.Background(), u, true)
