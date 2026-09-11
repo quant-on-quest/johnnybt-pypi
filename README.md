@@ -293,32 +293,54 @@ twine 也行：`twine upload --repository-url https://pypi.example.com/legacy/ -
 
 1. 「用户」→ 新建用户，名字随意（GitHub 名 / 微信名），备注写公司、付款信息
 2. 进入该用户 → 选包、填到期日（留空 = 永久）→ 授权
-3. 生成 token（read）。页面会**显示一次** token，并附现成的安装命令和配置片段，整段复制发给客户
+3. 生成 token（read）。页面会**显示一次** token，并附三步走的 uv 用法（登录 → 全局索引 → 正常用），整段复制发给客户
 
 到期后 pip 会收到 403（提示信息清楚），续费就改到期日。客户 token 泄漏了就吊销再发一个。
 
-### 5.3 客户怎么装
+### 5.3 客户怎么装（uv 优先）
+
+需要 uv ≥ 0.8.18（旧版 `uv self update`）。前两步只做一次：
 
 ```bash
-uv pip install --index-url https://__token__:jbt_xxx@pypi.example.com/simple/ johnnybt
+# 1. 把 token 存进 uv 的凭证仓库（只发给这个地址，不进 shell 历史、不进 uv.lock）
+uv auth login https://pypi.example.com/simple/ --token jbt_xxx
 ```
 
-或长期配置（token 不进 shell 历史）：
-
 ```toml
-# uv.toml 或 pyproject.toml [tool.uv]
+# 2. ~/.config/uv/uv.toml（macOS / Linux）或 %APPDATA%\uv\uv.toml（Windows）
 [[index]]
 name = "johnnybt"
 url = "https://pypi.example.com/simple/"
+authenticate = "always"
 ```
+
+之后就是普通 uv：
+
 ```bash
-export UV_INDEX_JOHNNYBT_USERNAME=__token__
-export UV_INDEX_JOHNNYBT_PASSWORD=jbt_xxx
+uv add johnnybt          # 加进项目
+uvx johnnybt-cli         # 直接跑包里的命令行工具
+uv pip install johnnybt  # 装进当前环境
 ```
 
-pip 用户：`~/.pip/pip.conf` 里 `[global] extra-index-url = https://__token__:jbt_xxx@pypi.example.com/simple/`。
+公开包照常从 PyPI 来：uv 先问私有索引，我们对不认识的名字回 404，uv 就去 PyPI；只有你发布的包才从这里拿。`authenticate = "always"` 让 uv 第一次就带凭证，省掉一次 401 往返。
 
-客户随时可以打开首页 `https://pypi.example.com/` 粘 token，看自己有哪些包、什么时候到期。
+**高级用法**（后台生成 token 的页面里也有，折叠在「高级」下）：
+
+- **项目级钉死**，只在这个项目启用私有索引，其它包名根本不会来探，也是防依赖混淆的正解：
+  ```toml
+  # pyproject.toml
+  [[tool.uv.index]]
+  name = "johnnybt"
+  url = "https://pypi.example.com/simple/"
+  explicit = true
+
+  [tool.uv.sources]
+  johnnybt = { index = "johnnybt" }
+  ```
+- **CI / 容器**没法 `uv auth login` 时用环境变量（Secret 注入）：`UV_INDEX_JOHNNYBT_USERNAME=__token__`、`UV_INDEX_JOHNNYBT_PASSWORD=jbt_xxx`
+- **pip**：`~/.pip/pip.conf` 里 `[global] extra-index-url = https://__token__:jbt_xxx@pypi.example.com/simple/`
+
+客户随时可以打开首页 `https://pypi.example.com/` 粘 token，看自己有哪些包、什么时候到期，页面上同样有这套说明。
 
 ## 6. 升级
 
@@ -384,7 +406,7 @@ sudo userdel pypi-server
 - token 只存 sha256；管理员密码 argon2id；后台 API 有跨站请求保护；`/etc/pypi-server/env` 是 600
 - 未授权访问包返回 403
 - 服务器只能管"谁能下载"。wheel 下下来就能复制，代码本身的保护（编译、许可证校验）是另一个问题
-- **依赖混淆**：客户若用 `--extra-index-url`，公网 PyPI 上的同名包会被优先。在 PyPI 上占坑同名空壳包，或让客户用 uv 的 `[[index]] explicit = true` + `[tool.uv.sources]` 钉死索引
+- **依赖混淆**：uv 的 first-index 策略下私有索引排在 PyPI 前面，你有的包一定从这里拿；pip 用户若用 `--extra-index-url` 则公网同名包会被优先。稳妥做法：在 PyPI 上占坑同名空壳包，或项目里 `[[tool.uv.index]] explicit = true` + `[tool.uv.sources]` 钉死
 
 ## 10. 开发
 

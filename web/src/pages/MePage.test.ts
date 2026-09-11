@@ -40,7 +40,7 @@ describe('MePage (customer self-check)', () => {
     expect(text).toContain('johnnybt-demo')
     expect(text).toContain('0.2.0')
     expect(text).toContain('2099-01-01')
-    expect(text).toContain('uv pip install')
+    expect(text).toContain('uv auth login')
     expect(text).toContain(plain)
   })
 

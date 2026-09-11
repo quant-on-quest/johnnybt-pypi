@@ -53,7 +53,7 @@ describe('PackageDetailPage', () => {
     expect(text).toContain('>=3.10')
     expect(text).toContain('broken') // yank reason
     expect(text).toContain('alice')
-    expect(text).toContain('uv pip install')
+    expect(text).toContain('uv add johnnybt-demo')
   })
 
   it('renders the README as plain text (no HTML injection)', async () => {

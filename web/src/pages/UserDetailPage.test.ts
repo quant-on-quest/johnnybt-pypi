@@ -82,7 +82,7 @@ describe('UserDetailPage', () => {
     await flushPromises()
     expect(mocks.api.users.createToken).toHaveBeenCalledWith(2, 'desktop', 'read')
     expect(w.text()).toContain(plain)
-    expect(w.text()).toContain('uv pip install')
+    expect(w.text()).toContain('uv auth login')
     expect(w.text()).toContain('johnnybt-demo') // snippets default to the user's first package
   })
 
