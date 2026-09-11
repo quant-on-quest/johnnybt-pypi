@@ -32,7 +32,7 @@ jobs:
       - uses: actions/setup-go@v7
         with:
           go-version-file: go.mod
-      - uses: astral-sh/setup-uv@v10
+      - uses: astral-sh/setup-uv@v10.1.0
 
       # 前端先构建：Go 的 embed 测试要看到真实的 dist/。
       - name: 前端构建 + 测试
