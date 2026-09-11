@@ -1,6 +1,10 @@
 import { config } from '@vue/test-utils'
 import { defineComponent, h } from 'vue'
 
+// Dates are shown in the viewer's zone; pin it so CI (UTC) and laptops (UTC+8)
+// agree on what "2026-12-31 到期" means.
+process.env.TZ = 'Asia/Shanghai'
+
 /**
  * Nuxt UI components are replaced by transparent stubs that render every slot
  * (named ones too) so page tests can assert on text without booting Reka UI in
