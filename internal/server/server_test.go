@@ -255,3 +255,19 @@ func TestIndexCarriesAdminPath(t *testing.T) {
 		t.Errorf("index missing admin path:\n%s", b)
 	}
 }
+
+func TestOpenBlobsRoutesOSSScheme(t *testing.T) {
+	cfg := testConfig(t)
+	cfg.BlobURL = "oss://bucket?region=cn-guangzhou"
+	t.Setenv("OSS_ACCESS_KEY_ID", "")
+	if _, err := OpenBlobs(context.Background(), cfg); err == nil || !strings.Contains(err.Error(), "OSS_ACCESS_KEY_ID") {
+		t.Errorf("oss:// should use the native backend and demand credentials, got %v", err)
+	}
+	t.Setenv("OSS_ACCESS_KEY_ID", "x")
+	t.Setenv("OSS_ACCESS_KEY_SECRET", "y")
+	b, err := OpenBlobs(context.Background(), cfg)
+	if err != nil {
+		t.Fatal(err)
+	}
+	b.Close()
+}

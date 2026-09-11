@@ -149,3 +149,61 @@ func TestContentTypeForKey(t *testing.T) {
 		}
 	}
 }
+
+func TestS3RoundTripAgainstFakeServer(t *testing.T) {
+	t.Setenv("AWS_ACCESS_KEY_ID", "test-ak")
+	t.Setenv("AWS_SECRET_ACCESS_KEY", "test-sk")
+	fake, srv := newFakeS3(t)
+	s, err := OpenURL(context.Background(), s3URL(srv, ""), true)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer s.Close()
+	roundTrip(t, s)
+	if _, ok := fake.objects["test-bucket/abc123/johnnybt_demo-0.1.0-py3-none-any.whl"]; ok {
+		t.Error("object should be gone after Delete")
+	}
+	for _, h := range fake.puts {
+		if sha := h.Get("X-Amz-Content-Sha256"); strings.HasPrefix(sha, "STREAMING-") {
+			t.Errorf("PUT used %s; OSS rejects chunked/trailer uploads", sha)
+		}
+		if h.Get("Content-Length") == "" {
+			t.Error("PUT must carry Content-Length")
+		}
+	}
+	if len(fake.puts) == 0 {
+		t.Fatal("no PUT recorded")
+	}
+}
+
+func TestS3PrefixAndSignedURLRoundTrip(t *testing.T) {
+	t.Setenv("AWS_ACCESS_KEY_ID", "test-ak")
+	t.Setenv("AWS_SECRET_ACCESS_KEY", "test-sk")
+	fake, srv := newFakeS3(t)
+	s, err := OpenURL(context.Background(), s3URL(srv, "&prefix=pypi/"), true)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer s.Close()
+	if err := s.Put(context.Background(), "k/x.whl", strings.NewReader("data")); err != nil {
+		t.Fatal(err)
+	}
+	if _, ok := fake.objects["test-bucket/pypi/k/x.whl"]; !ok {
+		t.Errorf("prefix not applied to raw PUT; have %v", keysOf(fake.objects))
+	}
+	rep, err := Check(context.Background(), s, srv.Client())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !rep.Wrote || !rep.Read || !rep.SignedFetch || !rep.Deleted || !strings.Contains(rep.SignedURL, "/test-bucket/pypi/_probe/") {
+		t.Errorf("report = %+v", rep)
+	}
+}
+
+func keysOf(m map[string][]byte) []string {
+	out := make([]string, 0, len(m))
+	for k := range m {
+		out = append(out, k)
+	}
+	return out
+}

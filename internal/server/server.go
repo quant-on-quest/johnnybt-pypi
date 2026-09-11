@@ -72,6 +72,13 @@ func OpenBlobs(ctx context.Context, cfg config.Config) (blob.Store, error) {
 	if cfg.BlobURL == "" {
 		return blob.NewLocal(cfg.BlobDir())
 	}
+	if strings.HasPrefix(cfg.BlobURL, "oss://") {
+		b, err := blob.OpenOSS(ctx, cfg.BlobURL, cfg.BlobSignedURLs)
+		if err != nil {
+			return nil, fmt.Errorf("blob store: %w", err)
+		}
+		return b, nil
+	}
 	b, err := blob.OpenURL(ctx, cfg.BlobURL, cfg.BlobSignedURLs)
 	if err != nil {
 		return nil, fmt.Errorf("blob store: %w", err)

@@ -6,7 +6,7 @@
 - **客户不用注册**：你在后台建用户 → 授权 → 生成 token → 发给他；客户在首页粘 token 就能自查
 - **管理员首启自动生成**：密码打印在日志并写入数据目录；忘了 `pypi-server admin reset-password`
 - **HTTPS 内置**：填一个域名就自动申请 Let's Encrypt 证书并续期
-- **文件存储可换**：本机目录 / 阿里云 OSS / 腾讯 COS / MinIO / R2 …，改一个 URL 即迁移
+- **文件存储可换**：本机目录 / 阿里云 OSS（官方 SDK）/ 腾讯 COS / MinIO / R2 …，改一个 URL 即迁移
 - **协议**：PEP 503 HTML + PEP 691 JSON、PEP 658 wheel 元数据、`/legacy/` 上传（`uv publish` / `twine`）
 
 技术栈：Go 1.27 标准库 `net/http`、SQLite（纯 Go，无 cgo）、`gocloud.dev/blob`、Vue 3 + Nuxt UI。
@@ -165,7 +165,7 @@ server {
 
 默认文件存在本机 `/var/lib/pypi-server/blobs/`，小规模够用。放到 OSS 的好处：下载 302 到 OSS 的签名 URL，**带宽和流量不经过你的 ECS**（ECS 公网带宽通常是瓶颈和主要成本）；服务器坏了数据也在。
 
-存储层用的是 [Go CDK `blob`](https://gocloud.dev/howto/blob/)，OSS 走它的 S3 兼容接口。腾讯 COS、MinIO、Cloudflare R2 同样是一个 URL 的事，见 4.5。
+OSS 走的是阿里云**官方 Go SDK**（不是 S3 兼容层——那层不支持 AWS SDK 的分块上传，踩过坑了）。腾讯 COS、MinIO、Cloudflare R2 通过 S3 协议接入，见 4.5。
 
 ### 4.1 创建 Bucket
 
@@ -173,27 +173,12 @@ OSS 控制台 → 创建 Bucket：
 
 | 项 | 选 | 说明 |
 |---|---|---|
-| 地域 | 和 ECS 同地域 | 例如都在华东1（杭州） |
+| 地域 | 随意，建议离客户近 | 服务器和桶不必同地域 |
 | 存储类型 | 标准存储 | |
 | **读写权限** | **私有** | 绝不能公共读，否则谁都能下 |
 | 版本控制 | 不开启 | |
-| 服务端加密 | 随意 | |
 
-记下 Bucket 名和地域。地域对应的 Region ID / Endpoint：
-
-| 地域 | Region ID | 公网 Endpoint |
-|---|---|---|
-| 华东1（杭州） | `oss-cn-hangzhou` | `https://oss-cn-hangzhou.aliyuncs.com` |
-| 华东2（上海） | `oss-cn-shanghai` | `https://oss-cn-shanghai.aliyuncs.com` |
-| 华北2（北京） | `oss-cn-beijing` | `https://oss-cn-beijing.aliyuncs.com` |
-| 华北3（张家口） | `oss-cn-zhangjiakou` | `https://oss-cn-zhangjiakou.aliyuncs.com` |
-| 华南1（深圳） | `oss-cn-shenzhen` | `https://oss-cn-shenzhen.aliyuncs.com` |
-| 华南3（广州） | `oss-cn-guangzhou` | `https://oss-cn-guangzhou.aliyuncs.com` |
-| 西南1（成都） | `oss-cn-chengdu` | `https://oss-cn-chengdu.aliyuncs.com` |
-| 中国香港 | `oss-cn-hongkong` | `https://oss-cn-hongkong.aliyuncs.com` |
-| 新加坡 | `oss-ap-southeast-1` | `https://oss-ap-southeast-1.aliyuncs.com` |
-
-其它地域在 Bucket 概览页的「访问端口」里能看到。
+记下 Bucket 名和地域 ID（Bucket 概览页「访问端口」里 Endpoint 去掉 `oss-` 前缀和 `.aliyuncs.com` 就是，例如 `oss-cn-guangzhou.aliyuncs.com` → `cn-guangzhou`）。
 
 ### 4.2 创建 RAM 子账号（不要用主账号 AccessKey）
 
@@ -207,17 +192,8 @@ RAM 控制台 → 用户 → 创建用户，勾选「使用永久 AccessKey 访�
   "Statement": [
     {
       "Effect": "Allow",
-      "Action": [
-        "oss:GetObject",
-        "oss:PutObject",
-        "oss:DeleteObject",
-        "oss:ListObjects",
-        "oss:GetBucketInfo"
-      ],
-      "Resource": [
-        "acs:oss:*:*:my-bucket",
-        "acs:oss:*:*:my-bucket/*"
-      ]
+      "Action": ["oss:GetObject", "oss:PutObject", "oss:DeleteObject", "oss:GetBucketInfo"],
+      "Resource": ["acs:oss:*:*:my-bucket", "acs:oss:*:*:my-bucket/*"]
     }
   ]
 }
@@ -230,39 +206,37 @@ RAM 控制台 → 用户 → 创建用户，勾选「使用永久 AccessKey 访�
 编辑 `/etc/pypi-server/env`（文件权限已是 600，只有 root 可读）：
 
 ```bash
-PYPI_BLOB_URL=s3://my-bucket?endpoint=https://oss-cn-hangzhou.aliyuncs.com&region=oss-cn-hangzhou&request_checksum_calculation=when_required&response_checksum_validation=when_required
-AWS_ACCESS_KEY_ID=LTAI5t...            # RAM 用户的 AccessKey ID
-AWS_SECRET_ACCESS_KEY=...              # AccessKey Secret
+PYPI_BLOB_URL=oss://my-bucket?region=cn-guangzhou
+OSS_ACCESS_KEY_ID=LTAI5t...            # RAM 用户的 AccessKey ID
+OSS_ACCESS_KEY_SECRET=...              # AccessKey Secret
 ```
 
-参数解释：
+URL 参数：
 
 | 参数 | 说明 |
 |---|---|
-| `s3://my-bucket` | Bucket 名 |
-| `endpoint=` | 4.1 表里的**公网** Endpoint |
-| `region=` | 4.1 表里的 Region ID |
-| `request_checksum_calculation=when_required`、`response_checksum_validation=when_required` | **必须带**。新版 AWS SDK 默认给请求加 CRC 校验头，OSS 不认 |
+| `oss://my-bucket` | Bucket 名 |
+| `region=cn-guangzhou` | **必填**，Bucket 所在地域 ID |
 | `prefix=pypi/` | 可选，所有对象放到桶内这个目录下，方便和别的东西共用一个桶 |
-
-> 变量名叫 `AWS_*` 是因为走的是 S3 协议，填的就是 OSS 的 AccessKey。
+| `endpoint=` | 可选，默认按 region 生成公网 Endpoint；自定义域名 / 加速域名时填 |
+| `internal=true` | 可选，走内网 Endpoint（见 4.5 的取舍） |
 
 ### 4.4 验证，然后重启
 
 **不要直接重启**，先用自检命令把写入、读回、签名 URL 下载、删除全走一遍：
 
 ```bash
-sudo -u pypi-server bash -c 'set -a; source /etc/pypi-server/env; set +a; pypi-server blob check'
+sudo -u pypi-server bash -c 'set -a; source /etc/pypi-server/env; set +a; PYPI_DATA_DIR=/var/lib/pypi-server pypi-server blob check'
 ```
 
 正常输出：
 
 ```
-存储: s3://my-bucket?endpoint=...
+存储: oss://my-bucket?region=cn-guangzhou
 签名 URL: true
 ✓ 写入探测对象 _probe/3ce9e4aa8896091b.txt
 ✓ 读回并比对
-✓ 通过签名 URL 下载（https://my-bucket.oss-cn-hangzhou.aliyuncs.com/_probe/...?X-Amz-...）
+✓ 通过签名 URL 下载（https://my-bucket.oss-cn-guangzhou.aliyuncs.com/_probe/...?x-oss-signature-version=OSS4-HMAC-SHA256&...）
 ✓ 删除探测对象
 存储配置可用
 ```
@@ -272,10 +246,10 @@ sudo -u pypi-server bash -c 'set -a; source /etc/pypi-server/env; set +a; pypi-s
 | 错误里包含 | 原因 |
 |---|---|
 | `AccessDenied` | RAM 策略没覆盖这个 Bucket，或 AccessKey 填错 |
-| `NoSuchBucket` / DNS 解析失败 | Bucket 名或 endpoint 地域不对 |
-| `SignatureDoesNotMatch` | 试试把 `region=oss-cn-hangzhou` 改成 `region=cn-hangzhou` |
-| `InvalidRequest` 提到 checksum / `x-amz-checksum` | 少了 `request_checksum_calculation=when_required` |
-| 签名 URL 下载 403 | Bucket 是公共读/写以外的特殊 ACL，或时间不同步（`timedatectl`） |
+| `NoSuchBucket` | Bucket 名不对，或 region 不是它所在的地域 |
+| `InvalidAccessKeyId` | AccessKey ID 不存在 / 被禁用 |
+| DNS 解析失败 | region 拼错（应形如 `cn-guangzhou`，不带 `oss-`） |
+| 签名 URL 下载 403 | 时间不同步（`timedatectl`），或 Bucket 开了特殊的防盗链 / Referer 白名单 |
 
 通过之后：
 
@@ -292,12 +266,12 @@ ossutil cp -r /var/lib/pypi-server/blobs/ oss://my-bucket/
 
 ### 4.5 几个要知道的事
 
-- **内网 Endpoint 的取舍**。ECS 和 OSS 同地域时，`oss-cn-hangzhou-internal.aliyuncs.com` 上传下载不计流量费，但**签名 URL 里也会是内网域名，客户打不开**。所以：默认（`PYPI_BLOB_SIGNED_URLS=true`，客户直连 OSS）必须用公网 Endpoint；如果你更在意 OSS 外网流量费，可以 `PYPI_BLOB_SIGNED_URLS=false` + 内网 Endpoint，让 ECS 转发，那时走的就是 ECS 的公网带宽。
+- **内网 Endpoint 的取舍**。ECS 和 OSS 同地域时 `internal=true` 上传下载不计流量费，但**签名 URL 里也会是内网域名，客户打不开**。所以：默认（`PYPI_BLOB_SIGNED_URLS=true`，客户直连 OSS）必须走公网；如果你更在意 OSS 外网流量费，可以 `PYPI_BLOB_SIGNED_URLS=false` + `internal=true`，让 ECS 转发，那时走的就是 ECS 的公网带宽。
 - **费用**：OSS 公网下行流量按量计费（约 0.5 元/GB），wheel 通常几 MB 到几十 MB，一般可以忽略；量大可以考虑 OSS 的传输加速或 CDN。
 - **签名 URL 有效期 10 分钟**，pip/uv 拿到 302 后立刻下载，够用；URL 泄漏出去 10 分钟后就失效。
-- **同一套配置换成腾讯 COS**：`s3://my-bucket-1250000000?endpoint=https://cos.ap-guangzhou.myqcloud.com&region=ap-guangzhou&request_checksum_calculation=when_required&response_checksum_validation=when_required`，凭证填 COS 的 SecretId / SecretKey。
-- **MinIO / 自建**：`s3://pypi?endpoint=http://minio.internal:9000&region=us-east-1&use_path_style=true&disable_https=true`。注意 OSS/COS **不要**加 `use_path_style`。
-- **迁移到别的服务商**：用 `rclone sync` 把旧桶拷到新桶，改 `PYPI_BLOB_URL`，重启。数据库里只存相对 key，不含桶信息。
+- **腾讯 COS**：`PYPI_BLOB_URL=s3://my-bucket-1250000000?endpoint=https://cos.ap-guangzhou.myqcloud.com&region=ap-guangzhou&request_checksum_calculation=when_required&response_checksum_validation=when_required`，凭证放 `AWS_ACCESS_KEY_ID` / `AWS_SECRET_ACCESS_KEY`（填 COS 的 SecretId / SecretKey）。
+- **MinIO / 自建**：`s3://pypi?endpoint=http://minio.internal:9000&region=us-east-1&use_path_style=true&disable_https=true`。
+- **迁移到别的服务商**：用 `rclone sync`（或 `ossutil` / `coscli`）把旧桶拷到新桶，改 `PYPI_BLOB_URL`，重启。数据库里只存相对 key，不含桶信息。
 - 需要 GCS / Azure：`internal/blob/gocloud.go` 加一行 `_ "gocloud.dev/blob/gcsblob"` 重新编译。
 
 ## 5. 日常使用
@@ -372,9 +346,10 @@ curl -fsSL https://raw.githubusercontent.com/quant-on-quest/johnnybt-pypi/main/s
 | `PYPI_HTTP_ADDR` | `:80` | 仅 TLS 模式：ACME + 跳转的明文端口 |
 | `PYPI_BASE_URL` | 按请求推断（TLS 时 `https://<第一个域名>`） | 对外地址；反向代理后面必须设 |
 | `PYPI_ADMIN_PATH` | `/admin` | 管理后台前缀。首页永远是客户自查页；想藏后台就设成 `/manage-x7k2` 之类 |
-| `PYPI_BLOB_URL` | 空 = `$PYPI_DATA_DIR/blobs` | 对象存储地址（见第 4 节） |
+| `PYPI_BLOB_URL` | 空 = `$PYPI_DATA_DIR/blobs` | 对象存储地址：`oss://`（阿里云）或 `s3://`（其它），见第 4 节 |
 | `PYPI_BLOB_SIGNED_URLS` | `true` | 下载 302 到签名 URL；`false` 由本机转发 |
-| `AWS_ACCESS_KEY_ID` / `AWS_SECRET_ACCESS_KEY` | 空 | 对象存储凭证 |
+| `OSS_ACCESS_KEY_ID` / `OSS_ACCESS_KEY_SECRET` | 空 | 阿里云 OSS 凭证 |
+| `AWS_ACCESS_KEY_ID` / `AWS_SECRET_ACCESS_KEY` | 空 | S3 兼容服务的凭证 |
 | `PYPI_DATA_DIR` | `/var/lib/pypi-server`（systemd 单元里设） | SQLite、本地文件、证书、初始密码 |
 | `PYPI_SESSION_TTL` | `168h` | 后台登录有效期 |
 | `PYPI_MAX_UPLOAD_MB` | `512` | 单文件上传上限 |
@@ -431,7 +406,7 @@ internal/
   pypi/              /simple /files /legacy —— pip/uv 面对的协议层
   api/               /api/v1 —— 管理界面用的 JSON API
   store/             SQLite 与迁移（migrations/*.sql 内嵌）
-  blob/              存储接口：本地目录 + gocloud（s3/file/mem）+ 自检
+  blob/              存储接口：本地目录 + 阿里云 OSS 官方 SDK + gocloud（s3/file/mem）+ 自检
   pkgmeta/           包名归一化、文件名解析、METADATA 抽取
   auth/              argon2 密码、token 生成/校验
   server/            路由拼装、中间件、autocert

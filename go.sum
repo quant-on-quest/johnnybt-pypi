@@ -20,6 +20,8 @@ github.com/GoogleCloudPlatform/opentelemetry-operations-go/exporter/metric v0.55
 github.com/GoogleCloudPlatform/opentelemetry-operations-go/exporter/metric v0.55.0/go.mod h1:IA1C1U7jO/ENqm/vhi7V9YYpBsp+IMyqNrEN94N7tVc=
 github.com/GoogleCloudPlatform/opentelemetry-operations-go/internal/resourcemapping v0.55.0 h1:0s6TxfCu2KHkkZPnBfsQ2y5qia0jl3MMrmBhu3nCOYk=
 github.com/GoogleCloudPlatform/opentelemetry-operations-go/internal/resourcemapping v0.55.0/go.mod h1:Mf6O40IAyB9zR/1J8nGDDPirZQQPbYJni8Yisy7NTMc=
+github.com/aliyun/alibabacloud-oss-go-sdk-v2 v1.6.0 h1:uWzn3io54f9L9mvwsQQSv1KpkkFA06hBxI++RvIyvpI=
+github.com/aliyun/alibabacloud-oss-go-sdk-v2 v1.6.0/go.mod h1:FTzydeQVmR24FI0D6XWUOMKckjXehM/jgMn1xC+DA9M=
 github.com/aquasecurity/go-pep440-version v0.0.1 h1:8VKKQtH2aV61+0hovZS3T//rUF+6GDn18paFTVS0h0M=
 github.com/aquasecurity/go-pep440-version v0.0.1/go.mod h1:3naPe+Bp6wi3n4l5iBFCZgS0JG8vY6FT0H4NGhFJ+i4=
 github.com/aquasecurity/go-version v0.0.1 h1:4cNl516agK0TCn5F7mmYN+xVs1E3S45LkgZk3cbaW2E=
