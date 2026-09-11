@@ -1,0 +1,20 @@
+# build outputs
+/bin/
+/internal/web/dist/*
+!/internal/web/dist/.gitkeep
+
+# runtime data (sqlite, blobs, certs, initial admin password)
+/data/
+
+# frontend
+/web/node_modules/
+/web/auto-imports.d.ts
+/web/components.d.ts
+/web/.nuxt-ui/
+
+*.db
+*.db-wal
+*.db-shm
+
+# release archives
+/dist/

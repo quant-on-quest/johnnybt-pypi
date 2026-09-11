@@ -1,0 +1,28 @@
+# systemd unit installed by scripts/install.sh. Settings live in /etc/pypi-server/env.
+[Unit]
+Description=johnnybt-pypi private package index
+Documentation=https://github.com/quant-on-quest/johnnybt-pypi
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+User=pypi-server
+Group=pypi-server
+EnvironmentFile=-/etc/pypi-server/env
+Environment=PYPI_DATA_DIR=/var/lib/pypi-server
+WorkingDirectory=/var/lib/pypi-server
+ExecStart=/usr/local/bin/pypi-server
+Restart=on-failure
+RestartSec=3s
+# Bind :80/:443 without running as root (needed when PYPI_TLS_DOMAINS is set).
+AmbientCapabilities=CAP_NET_BIND_SERVICE
+CapabilityBoundingSet=CAP_NET_BIND_SERVICE
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+PrivateTmp=true
+ReadWritePaths=/var/lib/pypi-server
+LimitNOFILE=65536
+
+[Install]
+WantedBy=multi-user.target

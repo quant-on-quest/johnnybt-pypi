@@ -1,0 +1,58 @@
+# 打 tag 时跑：构建前端，交叉编译 linux/amd64、linux/arm64、darwin/arm64，
+# 连同 systemd 单元和配置模板打成 tar.gz，附 sha256，发到 GitHub Release。
+#
+#   git tag v0.1.0 && git push origin v0.1.0
+#
+# 安装脚本 scripts/install.sh 就是从这里的 release 下载的。
+name: Release
+
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+
+permissions:
+  contents: write   # 创建 release、上传附件
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: pnpm/action-setup@v6
+        with:
+          package_json_file: web/package.json
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: pnpm
+          cache-dependency-path: web/pnpm-lock.yaml
+      - uses: actions/setup-go@v7
+        with:
+          go-version-file: go.mod
+
+      - name: 前端构建
+        run: make web
+
+      # CGO_ENABLED=0（SQLite 是纯 Go 实现），所以一台机器交叉编译全部目标即可。
+      - name: 交叉编译 + 打包
+        run: ./scripts/build-release.sh "${GITHUB_REF_NAME}"
+
+      - name: 发布
+        uses: softprops/action-gh-release@v3
+        with:
+          files: |
+            dist/*.tar.gz
+            dist/checksums.txt
+          generate_release_notes: true
+          body: |
+            ## 安装 / 升级
+
+            ```bash
+            curl -fsSL https://raw.githubusercontent.com/quant-on-quest/johnnybt-pypi/main/scripts/install.sh | sudo bash
+            ```
+
+            国内服务器 GitHub 不通时：`curl -fsSL https://ghfast.top/https://raw.githubusercontent.com/quant-on-quest/johnnybt-pypi/main/scripts/install.sh | sudo GH_PROXY=https://ghfast.top/ bash`
+
+            完整说明见 [README](https://github.com/quant-on-quest/johnnybt-pypi#readme)。

@@ -1,0 +1,46 @@
+# 每次推送 main 和 PR 都跑：Go 测试、前端测试 + 类型检查、真实 uv 的端到端。
+# 多平台二进制不在这里编 —— 那是 release.yml 的事，只在打 tag 时跑。
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: pnpm/action-setup@v6
+        with:
+          package_json_file: web/package.json
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: pnpm
+          cache-dependency-path: web/pnpm-lock.yaml
+      - uses: actions/setup-go@v7
+        with:
+          go-version-file: go.mod
+      - uses: astral-sh/setup-uv@v10
+
+      # 前端先构建：Go 的 embed 测试要看到真实的 dist/。
+      - name: 前端构建 + 测试
+        run: make web test-web
+
+      - name: Go vet + test
+        run: make test-go
+
+      # 真实客户端回归：uv publish → 授权 → uv pip install；未授权用户必须装不上。
+      - name: 端到端
+        run: make e2e
