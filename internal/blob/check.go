@@ -19,6 +19,9 @@ type CheckReport struct {
 	SignedURL   string
 	SignedFetch bool
 	Deleted     bool
+	// DeleteError explains a failed cleanup (typically a missing
+	// oss:DeleteObject / s3:DeleteObject permission).
+	DeleteError string
 }
 
 // Check writes a probe object, reads it back, fetches it through a signed URL
@@ -35,7 +38,9 @@ func Check(ctx context.Context, s Store, client *http.Client) (*CheckReport, err
 	}
 	rep.Wrote = true
 	defer func() {
-		if err := s.Delete(ctx, rep.Key); err == nil {
+		if err := s.Delete(ctx, rep.Key); err != nil {
+			rep.DeleteError = err.Error()
+		} else {
 			rep.Deleted = true
 		}
 	}()

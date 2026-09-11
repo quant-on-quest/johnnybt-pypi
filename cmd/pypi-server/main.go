@@ -79,6 +79,9 @@ func blobCheck(cfg config.Config) int {
 		fmt.Println("- 该后端不提供签名 URL，下载将由服务器转发")
 	}
 	fmt.Printf("%s 删除探测对象\n", mark(rep.Deleted))
+	if rep.DeleteError != "" {
+		fmt.Printf("  删除失败：%s\n  （不影响上传和下载；删除包/版本时需要 DeleteObject 权限）\n", rep.DeleteError)
+	}
 	if err != nil {
 		fmt.Println("✗", err)
 		return 1

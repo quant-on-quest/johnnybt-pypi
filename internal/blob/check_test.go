@@ -2,6 +2,7 @@ package blob
 
 import (
 	"context"
+	"errors"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -77,5 +78,23 @@ func TestCheckReportsMismatch(t *testing.T) {
 	_, err := Check(context.Background(), signedStore{Store: inner, url: srv.URL}, srv.Client())
 	if err == nil || !strings.Contains(err.Error(), "signed URL") {
 		t.Errorf("expected a signed URL mismatch error, got %v", err)
+	}
+}
+
+type noDelete struct{ Store }
+
+func (noDelete) Delete(context.Context, string) error {
+	return errors.New("AccessDenied: no oss:DeleteObject")
+}
+
+func TestCheckReportsDeleteFailure(t *testing.T) {
+	inner, _ := OpenURL(context.Background(), "mem://", true)
+	defer inner.Close()
+	rep, err := Check(context.Background(), noDelete{inner}, http.DefaultClient)
+	if err != nil {
+		t.Fatalf("delete failure should not fail the whole check: %v", err)
+	}
+	if rep.Deleted || !strings.Contains(rep.DeleteError, "AccessDenied") {
+		t.Errorf("report = %+v", rep)
 	}
 }
