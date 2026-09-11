@@ -177,6 +177,11 @@ else
   ip="$(hostname -I 2>/dev/null | awk '{print $1}')"
   url="http://${ip:-127.0.0.1}:$port"
 fi
+# 首启时密码文件在服务 active 之后才写出来，等它几秒
+for _ in $(seq 1 10); do
+  [ -f "$DATA_DIR/initial_admin_password" ] && break
+  sleep 0.5
+done
 if [ -f "$DATA_DIR/initial_admin_password" ]; then
   echo "首次启动已生成管理员账号（登录后请删除 $DATA_DIR/initial_admin_password）："
   sed 's/^/    /' "$DATA_DIR/initial_admin_password"
